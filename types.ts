@@ -6,7 +6,8 @@ export enum AppView {
   PROFILE = 'PROFILE',
   AUTH = 'AUTH',
   DETAILS = 'DETAILS',
-  SCAN = 'SCAN'
+  SCAN = 'SCAN',
+  FOOD_SCAN = 'FOOD_SCAN'
 }
 
 export type FoodGroup = 'Meat' | 'Vegetables' | 'Carbs' | 'Fruits' | 'Dairy' | 'Fats' | 'Other';
@@ -22,6 +23,16 @@ export interface User {
   activityLevel: string;
   profilePic: string;
   units: 'Imperial' | 'Metric';
+  // Gamification fields
+  level: number;
+  xp: number;
+  xpNextLevel: number;
+  lastAwardedDate: string; // YYYY-MM-DD
+  awardsClaimed: {
+    protein: boolean;
+    water: boolean;
+    calories: boolean;
+  };
 }
 
 export interface FoodItem {

@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { 
   ArrowLeft, LogOut, ChevronRight, Bell, Scale, 
-  Target, Activity, Flame, Shield, Globe, Edit3, Smartphone, Beef, X, Check
+  Target, Activity, Flame, Shield, Globe, Edit3, Smartphone, Beef, X, Check, Star
 } from 'lucide-react';
 
 interface Props {
@@ -132,7 +132,6 @@ const Profile: React.FC<Props> = ({ user, onLogout, onUpdateUser, onBack }) => {
   const handleUpdateUnit = (newUnit: 'Imperial' | 'Metric') => {
     if (newUnit === user.units) return;
 
-    // Simple conversion logic for weight when switching units
     let factor = newUnit === 'Metric' ? 0.453592 : 2.20462;
     const updated = { 
       ...user, 
@@ -145,6 +144,7 @@ const Profile: React.FC<Props> = ({ user, onLogout, onUpdateUser, onBack }) => {
   };
 
   const weightLabel = user.units === 'Imperial' ? 'lbs' : 'kg';
+  const xpPercent = (user.xp / user.xpNextLevel) * 100;
 
   return (
     <div className="min-h-screen bg-[#050505] text-white">
@@ -159,12 +159,24 @@ const Profile: React.FC<Props> = ({ user, onLogout, onUpdateUser, onBack }) => {
           <div className="w-28 h-28 rounded-full overflow-hidden border-2 border-zinc-800 ring-4 ring-lime-500/10">
             <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
           </div>
-          <button className="absolute bottom-1 right-1 w-8 h-8 bg-zinc-900 border border-zinc-800 rounded-full flex items-center justify-center text-lime-400 shadow-xl hover:bg-zinc-800">
-            <Edit3 size={14} />
-          </button>
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-lime-400 text-black px-4 py-1 rounded-full text-[10px] font-black uppercase shadow-lg border-2 border-black">
+            Lvl {user.level}
+          </div>
         </div>
         <h2 className="text-2xl font-black mb-1">{user.name}</h2>
-        <p className="text-zinc-500 text-sm font-medium mb-4">{user.email}</p>
+        <p className="text-zinc-500 text-sm font-medium mb-6">{user.email}</p>
+        
+        {/* XP Summary in Profile */}
+        <div className="w-full max-w-xs mb-8">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[10px] font-black text-lime-400 uppercase tracking-widest">Rank: Elite Striver</span>
+            <span className="text-[10px] text-zinc-500 font-bold uppercase">{user.xp} / {user.xpNextLevel} XP</span>
+          </div>
+          <div className="w-full h-2 bg-zinc-900 rounded-full border border-zinc-800 overflow-hidden">
+            <div className="h-full bg-lime-400 transition-all duration-500" style={{ width: `${xpPercent}%` }} />
+          </div>
+        </div>
+
         <div className="px-4 py-1.5 rounded-full border border-lime-500/20 bg-lime-500/5 text-lime-400 text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
           <Shield size={12} fill="currentColor" fillOpacity={0.2} /> Pro Member
         </div>

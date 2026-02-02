@@ -23,10 +23,19 @@ const Auth: React.FC<Props> = ({ onLogin }) => {
       currentWeight: 165,
       targetWeight: 155,
       dailyCalories: 2400,
-      proteinGoal: 150, // Default protein goal
+      proteinGoal: 150,
       activityLevel: 'Moderately Active',
       profilePic: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&h=400&fit=crop',
-      units: 'Imperial'
+      units: 'Imperial',
+      level: 1,
+      xp: 0,
+      xpNextLevel: 500,
+      lastAwardedDate: new Date().toISOString().split('T')[0],
+      awardsClaimed: {
+        protein: false,
+        water: false,
+        calories: false
+      }
     });
   };
 

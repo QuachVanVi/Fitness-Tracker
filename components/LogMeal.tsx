@@ -1,29 +1,36 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Scan, Plus, ArrowLeft, X, Check, ChefHat, Trash2, Save, ShoppingBag, Filter } from 'lucide-react';
+import { Search, Scan, Plus, ArrowLeft, X, Check, ChefHat, Trash2, Save, ShoppingBag, Filter, Coffee, Sun, Moon, Pizza } from 'lucide-react';
 import { MOCK_FOODS } from '../constants';
 import { FoodItem, CustomMeal, FoodGroup } from '../types';
 
 interface Props {
   customMeals: CustomMeal[];
+  forceBuilder?: boolean;
   onSelectFood: (food: FoodItem) => void;
   onSaveCustomMeal: (meal: CustomMeal) => void;
   onDeleteCustomMeal: (id: string) => void;
-  onLogCustomMeal: (meal: CustomMeal) => void;
+  onLogCustomMeal: (meal: CustomMeal, category: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack') => void;
   onBack: () => void;
   onBuilderToggle?: (isOpen: boolean) => void;
+  onOpenScan?: () => void;
 }
 
 const FOOD_GROUPS: (FoodGroup | 'All')[] = ['All', 'Meat', 'Vegetables', 'Carbs', 'Fruits', 'Dairy', 'Fats'];
 
+// Helper to ensure max 2 decimals
+const roundToTwo = (num: number) => Math.round((num + Number.EPSILON) * 100) / 100;
+
 const LogMeal: React.FC<Props> = ({ 
   customMeals, 
+  forceBuilder,
   onSelectFood, 
   onSaveCustomMeal, 
   onDeleteCustomMeal, 
   onLogCustomMeal, 
   onBack,
-  onBuilderToggle
+  onBuilderToggle,
+  onOpenScan
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('Recent');
@@ -31,16 +38,25 @@ const LogMeal: React.FC<Props> = ({
   const [showBuilder, setShowBuilder] = useState(false);
   const [loggingId, setLoggingId] = useState<string | null>(null);
   
+  // Category Selection State for Saved Library
+  const [mealToLog, setMealToLog] = useState<CustomMeal | null>(null);
+
   // Meal Builder State
   const [mealName, setMealName] = useState('');
   const [builderItems, setBuilderItems] = useState<FoodItem[]>([]);
   const [builderSearch, setBuilderSearch] = useState('');
   const [builderSelectedGroup, setBuilderSelectedGroup] = useState<(FoodGroup | 'All')>('All');
 
-  // Sync builder status with parent to hide navigation
   useEffect(() => {
-    onBuilderToggle?.(showBuilder);
-  }, [showBuilder, onBuilderToggle]);
+    if (forceBuilder) {
+      setShowBuilder(true);
+      setActiveTab('My Meals');
+    }
+  }, [forceBuilder]);
+
+  useEffect(() => {
+    onBuilderToggle?.(showBuilder || !!mealToLog);
+  }, [showBuilder, mealToLog, onBuilderToggle]);
 
   const filterFoodList = (list: FoodItem[], query: string, group: FoodGroup | 'All') => {
     return list.filter(f => {
@@ -55,24 +71,21 @@ const LogMeal: React.FC<Props> = ({
 
   const builderTotals = builderItems.reduce((acc, item) => ({
     calories: acc.calories + item.calories,
-    protein: acc.protein + item.protein,
-    carbs: acc.carbs + item.carbs,
-    fat: acc.fat + item.fat,
+    protein: roundToTwo(acc.protein + item.protein),
+    carbs: roundToTwo(acc.carbs + item.carbs),
+    fat: roundToTwo(acc.fat + item.fat),
   }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
   const handleSaveMeal = () => {
-    if (!mealName.trim() || builderItems.length === 0) {
-      if (!mealName.trim()) alert('Please provide a name for your meal!');
-      return;
-    }
+    if (!mealName.trim() || builderItems.length === 0) return;
     
     const newMeal: CustomMeal = {
       id: Math.random().toString(36).substr(2, 9),
       name: mealName,
-      calories: builderTotals.calories,
-      protein: builderTotals.protein,
-      carbs: builderTotals.carbs,
-      fat: builderTotals.fat,
+      calories: Math.round(builderTotals.calories),
+      protein: builderTotals.protein, 
+      carbs: builderTotals.carbs,     
+      fat: builderTotals.fat,         
       items: builderItems.map(i => i.name)
     };
     
@@ -84,9 +97,17 @@ const LogMeal: React.FC<Props> = ({
   };
 
   const handleLogClick = (meal: CustomMeal) => {
-    setLoggingId(meal.id);
+    setMealToLog(meal);
+  };
+
+  const confirmLog = (category: 'Breakfast' | 'Lunch' | 'Dinner' | 'Snack') => {
+    if (!mealToLog) return;
+    setLoggingId(mealToLog.id);
+    const m = { ...mealToLog };
+    setMealToLog(null);
+    
     setTimeout(() => {
-      onLogCustomMeal(meal);
+      onLogCustomMeal(m, category);
       setLoggingId(null);
     }, 600);
   };
@@ -113,7 +134,7 @@ const LogMeal: React.FC<Props> = ({
           <div className="bg-lime-400/10 rounded-2xl p-4 border border-lime-400/20 grid grid-cols-4 gap-2 mb-4">
             <div className="text-center">
               <p className="text-[8px] text-zinc-500 font-bold uppercase mb-0.5">Kcal</p>
-              <p className="text-sm font-black text-white">{builderTotals.calories}</p>
+              <p className="text-sm font-black text-white">{Math.round(builderTotals.calories)}</p>
             </div>
             <div className="text-center border-l border-white/5">
               <p className="text-[8px] text-zinc-500 font-bold uppercase mb-0.5">Prot</p>
@@ -172,7 +193,6 @@ const LogMeal: React.FC<Props> = ({
               />
             </div>
             
-            {/* Category Chips in Builder */}
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-4 -mx-1 px-1 mb-2">
               {FOOD_GROUPS.map(group => (
                 <button
@@ -236,7 +256,9 @@ const LogMeal: React.FC<Props> = ({
         <div className="flex items-center justify-between mb-6">
           <button onClick={onBack} className="p-2 -ml-2 text-zinc-400 hover:text-white"><ArrowLeft size={24} /></button>
           <h1 className="text-xl font-bold">Log Meal</h1>
-          <button className="p-2 -mr-2 text-lime-400"><Scan size={24} /></button>
+          <button onClick={onOpenScan} className="p-2 -mr-2 text-lime-400 hover:text-lime-300 transition-colors">
+            <Scan size={24} />
+          </button>
         </div>
 
         <div className="relative mb-6">
@@ -313,21 +335,32 @@ const LogMeal: React.FC<Props> = ({
                     onClick={() => handleLogClick(meal)}
                     className="cursor-pointer"
                   >
-                    <div className="flex justify-between items-start mb-3">
-                      <div className="flex-1 pr-8">
-                        <h3 className="text-xl font-bold group-hover:text-lime-400 transition-colors">{meal.name}</h3>
-                        <div className="flex flex-wrap gap-1 mt-1.5">
-                          {meal.items.map((it, i) => (
-                            <span key={i} className="text-[9px] bg-zinc-900 text-zinc-500 px-2 py-0.5 rounded-lg border border-zinc-800 font-bold uppercase">
-                              {it}
-                            </span>
-                          ))}
+                    <div className="flex justify-between items-center mb-4">
+                      <div className="flex-1 pr-4 min-w-0">
+                        <h3 className="text-xl font-bold group-hover:text-lime-400 transition-colors truncate">{meal.name}</h3>
+                      </div>
+                      <div className="flex items-center gap-4 shrink-0">
+                        <div className="bg-lime-400/10 px-4 py-2 rounded-2xl border border-lime-400/20 text-center min-w-[70px] shadow-sm">
+                          <span className="text-lime-400 text-sm font-black block leading-none">{meal.calories}</span>
+                          <span className="text-[9px] text-lime-400/60 font-bold uppercase tracking-tighter">kcal</span>
                         </div>
+                        <button 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if(confirm('Delete this template?')) onDeleteCustomMeal(meal.id);
+                          }}
+                          className="p-2.5 text-zinc-700 hover:text-red-500 transition-all active:scale-90"
+                        >
+                          <Trash2 size={20} />
+                        </button>
                       </div>
-                      <div className="bg-lime-400/10 px-3 py-1.5 rounded-2xl border border-lime-400/20 text-center min-w-[70px]">
-                        <span className="text-lime-400 text-xs font-black block leading-none">{meal.calories}</span>
-                        <span className="text-[8px] text-lime-400/60 font-bold uppercase">kcal</span>
-                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {meal.items.map((it, i) => (
+                        <span key={i} className="text-[9px] bg-zinc-900 text-zinc-500 px-2.5 py-1 rounded-lg border border-zinc-800 font-bold uppercase tracking-tight">
+                          {it}
+                        </span>
+                      ))}
                     </div>
                   </div>
 
@@ -339,16 +372,6 @@ const LogMeal: React.FC<Props> = ({
                       </div>
                     </div>
                   )}
-
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if(confirm('Delete this template?')) onDeleteCustomMeal(meal.id);
-                    }}
-                    className="absolute top-4 right-4 p-2 text-zinc-700 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 size={16} />
-                  </button>
                 </div>
               )) : (
                 <div className="py-20 text-center">
@@ -382,16 +405,49 @@ const LogMeal: React.FC<Props> = ({
                 </button>
               </div>
             ))}
-            {filteredFoods.length === 0 && (
-              <div className="py-20 text-center text-zinc-600 italic">
-                No foods found in this category.
-              </div>
-            )}
           </div>
         )}
       </div>
+
+      {/* Category Selector Bottom Sheet */}
+      {mealToLog && (
+        <div className="fixed inset-0 z-[200] flex items-end justify-center animate-in fade-in duration-300">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMealToLog(null)} />
+          <div className="w-full max-w-md bg-[#121212] rounded-t-[40px] p-8 border-t border-zinc-800 relative z-10 animate-in slide-in-from-bottom duration-300">
+            <div className="w-12 h-1.5 bg-zinc-800 rounded-full mx-auto mb-8" />
+            <h3 className="text-2xl font-black mb-1">Select Meal Slot</h3>
+            <p className="text-zinc-500 text-sm font-bold uppercase tracking-widest mb-8">Logging: {mealToLog.name}</p>
+            
+            <div className="grid grid-cols-2 gap-4 mb-8">
+              <CategoryBtn icon={<Coffee size={20} />} label="Breakfast" onClick={() => confirmLog('Breakfast')} />
+              <CategoryBtn icon={<Sun size={20} />} label="Lunch" onClick={() => confirmLog('Lunch')} />
+              <CategoryBtn icon={<Moon size={20} />} label="Dinner" onClick={() => confirmLog('Dinner')} />
+              <CategoryBtn icon={<Pizza size={20} />} label="Snack" onClick={() => confirmLog('Snack')} />
+            </div>
+
+            <button 
+              onClick={() => setMealToLog(null)}
+              className="w-full py-5 rounded-2xl bg-zinc-900 text-zinc-500 font-bold hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
+const CategoryBtn = ({ icon, label, onClick }: { icon: React.ReactNode, label: string, onClick: () => void }) => (
+  <button 
+    onClick={onClick}
+    className="flex flex-col items-center justify-center gap-3 p-6 bg-zinc-900 border border-zinc-800 rounded-[28px] hover:border-lime-500/50 hover:bg-lime-500/5 group transition-all active:scale-95"
+  >
+    <div className="w-12 h-12 rounded-2xl bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:text-lime-400 group-hover:bg-zinc-900 transition-all">
+      {icon}
+    </div>
+    <span className="font-black text-xs uppercase tracking-widest">{label}</span>
+  </button>
+);
 
 export default LogMeal;
