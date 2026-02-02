@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ArrowLeft, Camera, RefreshCw, Zap, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Camera, RefreshCw, Zap, ShieldCheck, AlertCircle, Settings } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { User } from '../types';
 
@@ -20,24 +20,57 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
   useEffect(() => {
     startCamera();
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
+      stopCamera();
     };
   }, []);
 
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+  };
+
   const startCamera = async () => {
+    setError(null);
+    stopCamera();
+
+    // 1. Check for Secure Context (Required for mobile browsers)
+    if (!window.isSecureContext) {
+      setError('Camera requires a secure connection (HTTPS). If testing on mobile via IP, browser security blocks access.');
+      return;
+    }
+
+    // 2. Check Browser Support
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Camera API is not supported in this browser.');
+      return;
+    }
+
     try {
       const s = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'user' }, 
+        video: { 
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }, 
         audio: false 
       });
       setStream(s);
       if (videoRef.current) {
         videoRef.current.srcObject = s;
       }
-    } catch (err) {
-      setError('Camera access denied. Please enable camera permissions.');
+    } catch (err: any) {
+      console.error("Camera Error:", err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setError('Camera permission denied. Please allow access in settings.');
+      } else if (err.name === 'NotFoundError') {
+        setError('No camera found on this device.');
+      } else if (err.name === 'NotReadableError') {
+        setError('Camera is in use by another app.');
+      } else {
+        setError('Unable to access camera. Please restart the app.');
+      }
     }
   };
 
@@ -113,17 +146,33 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
         <div className="w-10 h-10"></div>
       </div>
 
-      <div className="flex-1 relative overflow-hidden bg-zinc-900">
-        <video 
-          ref={videoRef} 
-          autoPlay 
-          playsInline 
-          muted 
-          className="w-full h-full object-cover scale-x-[-1]"
-        />
+      <div className="flex-1 relative overflow-hidden bg-zinc-900 flex flex-col items-center justify-center">
+        {!error ? (
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            className="w-full h-full object-cover scale-x-[-1]"
+          />
+        ) : (
+          <div className="p-8 text-center max-w-sm">
+            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+              <AlertCircle size={32} className="text-red-500" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">Camera Error</h3>
+            <p className="text-zinc-400 text-sm mb-6">{error}</p>
+            <button 
+              onClick={() => startCamera()}
+              className="bg-lime-400 text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all w-full flex items-center justify-center gap-2"
+            >
+               <RefreshCw size={18} /> Try Again
+            </button>
+          </div>
+        )}
         
         {/* Scanning Frame */}
-        {!result && (
+        {!result && !error && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className={`w-72 h-96 border-2 rounded-[40px] relative transition-all duration-500 ${scanning ? 'border-lime-400 border-4' : 'border-white/30'}`}>
               <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black px-4 py-1 rounded-full text-[10px] font-bold text-zinc-500 uppercase tracking-widest border border-white/10">
@@ -195,11 +244,6 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
               {scanning ? <RefreshCw size={24} className="animate-spin" /> : <Camera size={24} />}
             </div>
           </button>
-        )}
-        {error && (
-          <div className="text-red-400 text-sm font-bold text-center px-4 bg-red-950/20 py-2 rounded-xl border border-red-900/30">
-            {error}
-          </div>
         )}
       </div>
 

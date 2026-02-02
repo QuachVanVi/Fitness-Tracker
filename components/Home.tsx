@@ -9,6 +9,7 @@ interface Props {
   waterIntake: number;
   setWaterIntake: (val: number) => void;
   onOpenScan: () => void;
+  onLogMeal: () => void;
 }
 
 const formatNum = (num: number) => {
@@ -18,7 +19,7 @@ const formatNum = (num: number) => {
   });
 };
 
-const Home: React.FC<Props> = ({ user, logs, waterIntake, setWaterIntake, onOpenScan }) => {
+const Home: React.FC<Props> = ({ user, logs, waterIntake, setWaterIntake, onOpenScan, onLogMeal }) => {
   if (!user) return null;
   
   const eaten = logs.reduce((sum, l) => sum + l.calories, 0);
@@ -191,7 +192,10 @@ const Home: React.FC<Props> = ({ user, logs, waterIntake, setWaterIntake, onOpen
             <p className="text-zinc-500 text-xs text-center py-6 italic opacity-50">Log your first meal to see it here.</p>
           )}
 
-          <button className="w-full bg-[#0a0a0a] border-2 border-dashed border-zinc-800/50 py-5 rounded-3xl flex items-center justify-center gap-3 text-zinc-500 font-bold hover:bg-zinc-900/30 transition-all active:scale-[0.98]">
+          <button 
+            onClick={onLogMeal}
+            className="w-full bg-[#0a0a0a] border-2 border-dashed border-zinc-800/50 py-5 rounded-3xl flex items-center justify-center gap-3 text-zinc-500 font-bold hover:bg-zinc-900/30 transition-all active:scale-[0.98]"
+          >
             <div className="w-7 h-7 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-800">
               <Plus size={16} />
             </div>

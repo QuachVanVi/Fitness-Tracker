@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { AppView, User, LoggedMeal, FoodItem, CustomMeal } from './types';
 import Home from './components/Home';
@@ -170,6 +169,10 @@ const App: React.FC = () => {
             waterIntake={waterIntake} 
             setWaterIntake={setWaterIntake}
             onOpenScan={() => setCurrentView(AppView.SCAN)}
+            onLogMeal={() => {
+              setForceBuilder(false);
+              setCurrentView(AppView.LOG);
+            }}
           />
         );
       case AppView.LOG:
@@ -219,7 +222,19 @@ const App: React.FC = () => {
       case AppView.FOOD_SCAN:
         return <FoodScan onAdd={addLog} onBack={() => setCurrentView(AppView.LOG)} />;
       default:
-        return <Home user={user} logs={logs} waterIntake={waterIntake} setWaterIntake={setWaterIntake} onOpenScan={() => setCurrentView(AppView.SCAN)} />;
+        return (
+          <Home 
+            user={user} 
+            logs={logs} 
+            waterIntake={waterIntake} 
+            setWaterIntake={setWaterIntake} 
+            onOpenScan={() => setCurrentView(AppView.SCAN)}
+            onLogMeal={() => {
+              setForceBuilder(false);
+              setCurrentView(AppView.LOG);
+            }}
+          />
+        );
     }
   };
 

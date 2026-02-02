@@ -1,9 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { User } from '../types';
 import { 
   ArrowLeft, LogOut, ChevronRight, Bell, Scale, 
-  Target, Activity, Flame, Shield, Globe, Edit3, Smartphone, Beef, X, Check, Star
+  Target, Activity, Flame, Shield, Globe, Edit3, Smartphone, Beef, X, Check, Star, Camera, RefreshCw, Download
 } from 'lucide-react';
 
 interface Props {
@@ -118,9 +118,146 @@ const UnitModal: React.FC<UnitModalProps> = ({ currentUnit, onSave, onClose }) =
   );
 };
 
+interface ProfileCameraProps {
+  onCapture: (imageSrc: string) => void;
+  onClose: () => void;
+}
+
+const ProfileCamera: React.FC<ProfileCameraProps> = ({ onCapture, onClose }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+
+  useEffect(() => {
+    startCamera();
+    return () => {
+      if (stream) stream.getTracks().forEach(track => track.stop());
+    };
+  }, []);
+
+  const startCamera = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'user', aspectRatio: 1 }, 
+        audio: false 
+      });
+      setStream(s);
+      if (videoRef.current) {
+        videoRef.current.srcObject = s;
+      }
+    } catch (err) {
+      console.error("Camera access denied", err);
+    }
+  };
+
+  const handleCapture = () => {
+    if (!videoRef.current || !canvasRef.current) return;
+    
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    const size = Math.min(video.videoWidth, video.videoHeight);
+    
+    // Set canvas to a reasonable size for profile pics (e.g. 400x400)
+    canvas.width = 400;
+    canvas.height = 400;
+    
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Calculate center crop
+    const sx = (video.videoWidth - size) / 2;
+    const sy = (video.videoHeight - size) / 2;
+
+    // Flip horizontally for mirroring effect if using front camera
+    ctx.translate(400, 0);
+    ctx.scale(-1, 1);
+
+    ctx.drawImage(video, sx, sy, size, size, 0, 0, 400, 400);
+    
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    setCapturedImage(dataUrl);
+  };
+
+  const handleRetake = () => {
+    setCapturedImage(null);
+  };
+
+  const handleSave = () => {
+    if (capturedImage) onCapture(capturedImage);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[300] bg-black flex flex-col">
+      <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center z-20">
+        <button onClick={onClose} className="w-10 h-10 rounded-full bg-black/50 backdrop-blur border border-white/10 flex items-center justify-center text-white">
+          <X size={20} />
+        </button>
+        <span className="font-bold text-sm uppercase tracking-widest">Update Profile Photo</span>
+        <div className="w-10"></div>
+      </div>
+
+      <div className="flex-1 relative flex items-center justify-center bg-zinc-900 overflow-hidden">
+        {!capturedImage ? (
+          <>
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              className="absolute inset-0 w-full h-full object-cover scale-x-[-1]"
+            />
+            {/* Overlay Mask */}
+            <div className="absolute inset-0 bg-black/50">
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 rounded-full border-4 border-lime-400 box-content shadow-[0_0_0_9999px_rgba(0,0,0,0.5)]"></div>
+            </div>
+            <div className="absolute bottom-12 left-0 right-0 flex justify-center">
+               <button 
+                 onClick={handleCapture}
+                 className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center active:scale-90 transition-transform"
+               >
+                 <div className="w-16 h-16 bg-white rounded-full"></div>
+               </button>
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center w-full h-full">
+            <div className="flex-1 w-full flex items-center justify-center relative">
+               <img src={capturedImage} className="w-full h-full object-cover absolute inset-0 opacity-50 blur-lg scale-110" />
+               <div className="relative z-10 w-64 h-64 rounded-full border-4 border-lime-400 overflow-hidden shadow-2xl">
+                 <img src={capturedImage} className="w-full h-full object-cover" />
+               </div>
+            </div>
+            <div className="h-32 w-full bg-black/80 backdrop-blur-xl absolute bottom-0 flex items-center justify-center gap-6 px-8 border-t border-zinc-800">
+               <button onClick={handleRetake} className="flex-1 py-4 rounded-2xl bg-zinc-800 text-white font-bold flex items-center justify-center gap-2">
+                 <RefreshCw size={18} /> Retake
+               </button>
+               <button onClick={handleSave} className="flex-1 py-4 rounded-2xl bg-lime-400 text-black font-bold flex items-center justify-center gap-2 shadow-lg shadow-lime-500/20">
+                 <Check size={18} strokeWidth={3} /> Save Photo
+               </button>
+            </div>
+          </div>
+        )}
+      </div>
+      <canvas ref={canvasRef} className="hidden" />
+    </div>
+  );
+};
+
 const Profile: React.FC<Props> = ({ user, onLogout, onUpdateUser, onBack }) => {
   const [editingField, setEditingField] = useState<{ field: keyof User, label: string } | null>(null);
   const [isUnitModalOpen, setIsUnitModalOpen] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
   if (!user) return null;
 
@@ -143,6 +280,22 @@ const Profile: React.FC<Props> = ({ user, onLogout, onUpdateUser, onBack }) => {
     setIsUnitModalOpen(false);
   };
 
+  const handleProfilePicUpdate = (imageSrc: string) => {
+    const updated = { ...user, profilePic: imageSrc };
+    onUpdateUser(updated);
+    setIsCameraOpen(false);
+  };
+
+  const handleInstallClick = () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    installPrompt.userChoice.then((choiceResult: any) => {
+      if (choiceResult.outcome === 'accepted') {
+        setInstallPrompt(null);
+      }
+    });
+  };
+
   const weightLabel = user.units === 'Imperial' ? 'lbs' : 'kg';
   const xpPercent = (user.xp / user.xpNextLevel) * 100;
 
@@ -155,11 +308,17 @@ const Profile: React.FC<Props> = ({ user, onLogout, onUpdateUser, onBack }) => {
       </header>
 
       <div className="flex flex-col items-center p-8 mb-4">
-        <div className="relative mb-6">
-          <div className="w-28 h-28 rounded-full overflow-hidden border-2 border-zinc-800 ring-4 ring-lime-500/10">
+        <div className="relative mb-6 group cursor-pointer" onClick={() => setIsCameraOpen(true)}>
+          <div className="w-28 h-28 rounded-full overflow-hidden border-2 border-zinc-800 ring-4 ring-lime-500/10 relative">
             <img src={user.profilePic} alt={user.name} className="w-full h-full object-cover" />
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Camera size={24} className="text-white" />
+            </div>
           </div>
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-lime-400 text-black px-4 py-1 rounded-full text-[10px] font-black uppercase shadow-lg border-2 border-black">
+          <div className="absolute bottom-0 right-0 bg-zinc-800 text-white p-2 rounded-full border border-black shadow-lg">
+            <Camera size={14} />
+          </div>
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-lime-400 text-black px-4 py-1 rounded-full text-[10px] font-black uppercase shadow-lg border-2 border-black whitespace-nowrap z-10">
             Lvl {user.level}
           </div>
         </div>
@@ -231,6 +390,16 @@ const Profile: React.FC<Props> = ({ user, onLogout, onUpdateUser, onBack }) => {
                 <div className="absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow-sm"></div>
               </div>
             </div>
+
+            {installPrompt && (
+              <div onClick={handleInstallClick}>
+                <PrefItem 
+                  icon={<Download size={20} />} 
+                  label="Install App" 
+                  subtext="Enable offline access" 
+                />
+              </div>
+            )}
             
             <div onClick={() => setIsUnitModalOpen(true)}>
               <PrefItem 
@@ -272,6 +441,13 @@ const Profile: React.FC<Props> = ({ user, onLogout, onUpdateUser, onBack }) => {
           currentUnit={user.units}
           onSave={handleUpdateUnit}
           onClose={() => setIsUnitModalOpen(false)}
+        />
+      )}
+
+      {isCameraOpen && (
+        <ProfileCamera 
+          onCapture={handleProfilePicUpdate}
+          onClose={() => setIsCameraOpen(false)}
         />
       )}
     </div>

@@ -49,7 +49,7 @@ const Trends: React.FC<Props> = ({ user, logs }) => {
         </div>
 
         <div className="h-48 w-full mt-4">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={192}>
             <AreaChart data={MOCK_WEIGHT_HISTORY}>
               <defs>
                 <linearGradient id="colorWeight" x1="0" y1="0" x2="0" y2="1">
@@ -96,7 +96,7 @@ const Trends: React.FC<Props> = ({ user, logs }) => {
         </div>
 
         <div className="h-48 w-full mt-4">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={192}>
             <BarChart data={MOCK_CALORIE_INTAKE}>
               <XAxis 
                 dataKey="day" 

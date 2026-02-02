@@ -21,24 +21,57 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
   useEffect(() => {
     startCamera();
     return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
+      stopCamera();
     };
   }, []);
 
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+  };
+
   const startCamera = async () => {
+    setError(null);
+    stopCamera();
+
+    // 1. Check for Secure Context
+    if (!window.isSecureContext) {
+      setError('Camera requires HTTPS. Mobile browsers block camera on insecure connections (http://192...).');
+      return;
+    }
+
+    // 2. Check Browser Support
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Camera API not supported in this browser.');
+      return;
+    }
+
     try {
       const s = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' }, 
+        video: { 
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 } 
+        }, 
         audio: false 
       });
       setStream(s);
       if (videoRef.current) {
         videoRef.current.srcObject = s;
       }
-    } catch (err) {
-      setError('Camera access denied. Please enable camera permissions.');
+    } catch (err: any) {
+      console.error("Camera Error:", err);
+      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setError('Permission denied. Please allow camera access in settings.');
+      } else if (err.name === 'NotFoundError') {
+        setError('No back camera found.');
+      } else if (err.name === 'NotReadableError') {
+        setError('Camera is in use by another app.');
+      } else {
+        setError('Camera error: ' + (err.message || 'Unknown'));
+      }
     }
   };
 
@@ -143,21 +176,37 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
         <div className="w-10 h-10"></div>
       </div>
 
-      <div className="flex-1 relative overflow-hidden bg-zinc-900">
-        <video 
-          ref={videoRef} 
-          autoPlay 
-          playsInline 
-          muted 
-          className="w-full h-full object-cover"
-        />
+      <div className="flex-1 relative overflow-hidden bg-zinc-900 flex flex-col items-center justify-center">
+        {!error ? (
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="p-8 text-center max-w-sm">
+            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+              <AlertCircle size={32} className="text-red-500" />
+            </div>
+            <h3 className="text-xl font-bold mb-2">Scanner Error</h3>
+            <p className="text-zinc-400 text-sm mb-6">{error}</p>
+            <button 
+              onClick={() => startCamera()}
+              className="bg-lime-400 text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all w-full flex items-center justify-center gap-2"
+            >
+               <RefreshCw size={18} /> Try Again
+            </button>
+          </div>
+        )}
         
         {/* Scanning Overlay */}
-        {!result && (
+        {!result && !error && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className={`w-64 h-64 border-2 rounded-[32px] relative transition-all duration-500 ${scanning ? 'border-lime-400 border-4 scale-105' : 'border-white/20'}`}>
               <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/60 px-4 py-1.5 rounded-full text-[9px] font-black text-white/80 uppercase tracking-[0.2em] border border-white/5 whitespace-nowrap">
-                {error ? 'Invalid Input' : 'Scan your plate'}
+                Scan your plate
               </div>
               
               {/* Corner Accents */}
@@ -232,32 +281,17 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
       </div>
 
       {/* Control Bar */}
-      {!result && (
+      {!result && !error && (
         <div className="h-32 bg-black flex flex-col items-center justify-center px-6 pb-safe">
-          {error && (
-            <div className="mb-4 text-red-400 text-xs font-bold text-center px-4 bg-red-950/20 py-2 rounded-xl border border-red-900/30 flex items-center gap-2 animate-in slide-in-from-bottom duration-300">
-              <AlertCircle size={14} />
-              {error}
+          <button 
+            onClick={handleScan}
+            disabled={scanning}
+            className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition-all active:scale-90 disabled:opacity-50"
+          >
+            <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-black">
+              {scanning ? <RefreshCw size={24} className="animate-spin" /> : <Camera size={24} />}
             </div>
-          )}
-          {!error ? (
-            <button 
-              onClick={handleScan}
-              disabled={scanning}
-              className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition-all active:scale-90 disabled:opacity-50"
-            >
-              <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-black">
-                {scanning ? <RefreshCw size={24} className="animate-spin" /> : <Camera size={24} />}
-              </div>
-            </button>
-          ) : (
-            <button 
-              onClick={() => { setError(null); startCamera(); }}
-              className="px-6 py-3 bg-white text-black rounded-full font-black text-xs uppercase tracking-widest active:scale-95 transition-all"
-            >
-              Try Again
-            </button>
-          )}
+          </button>
         </div>
       )}
 
