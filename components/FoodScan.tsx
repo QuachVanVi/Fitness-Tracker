@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ArrowLeft, Camera, RefreshCw, Check, ChefHat, AlertCircle, Coffee, Sun, Moon, Pizza } from 'lucide-react';
+import { ArrowLeft, Camera, RefreshCw, Check, ChefHat, AlertCircle, Coffee, Sun, Moon, Pizza, Loader2 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { LoggedMeal } from '../types';
 
@@ -66,10 +66,8 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
   const handleScan = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     
-    // Ensure video is actually playing and has data
     if (videoRef.current.readyState !== 4) {
-      setError("Camera is loading, please wait...");
-      return;
+      return; // Wait for camera
     }
 
     setScanning(true);
@@ -78,17 +76,22 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
 
     try {
       if (!process.env.API_KEY) {
-        throw new Error("API Key is missing in app configuration.");
+        throw new Error("API Key is missing. Please restart app.");
       }
 
-      const canvas = canvasRef.current;
       const video = videoRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx?.drawImage(video, 0, 0);
+      const canvas = canvasRef.current;
       
-      const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+      // OPTIMIZATION: Downscale image to max 800px width to speed up API and prevent timeouts
+      const MAX_WIDTH = 800;
+      const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
+      canvas.width = video.videoWidth * scale;
+      canvas.height = video.videoHeight * scale;
+      
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      const imageData = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
 
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
@@ -97,21 +100,11 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
           {
             parts: [
               {
-                text: `You are a professional nutrition AI. First, analyze the image to determine if it contains an edible food item or a beverage.
-                
-                If the image contains random objects, electronics, furniture, landscapes, text, or anything that is NOT food, you MUST set "isFood" to false.
-                
-                If the image contains food, identify it and estimate nutritional content.
-                
-                Provide a JSON response with:
-                1. isFood (boolean)
-                2. name (short descriptive name)
-                3. calories (total estimated integer)
-                4. protein (grams)
-                5. carbs (grams)
-                6. fat (grams)
-                7. confidence (0.0 to 1.0)
-                8. reasoning (short 1-sentence analysis explaining why it is or isn't food)`
+                text: `Analyze this image. 
+                1. Is it food/drink? (true/false)
+                2. If yes, estimate name, calories, protein(g), carbs(g), fat(g).
+                3. Short reasoning.
+                Return JSON: { isFood, name, calories, protein, carbs, fat, confidence, reasoning }`
               },
               {
                 inlineData: {
@@ -130,13 +123,13 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
       const data = JSON.parse(response.text || '{}');
       
       if (data.isFood === false) {
-        setError("This doesn't look like food. Please try scanning a plate or ingredient.");
+        setError("Not recognized as food. Try getting closer or better lighting.");
       } else {
         setResult(data);
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'AI Analysis failed. Check internet connection.');
+      setError(err.message || 'Connection failed. Please try again.');
     } finally {
       setScanning(false);
     }
@@ -163,8 +156,8 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
   return (
     <div className="fixed inset-0 bg-black z-[150] flex flex-col text-white">
       {/* Overlay UI */}
-      <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-20">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10">
+      <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-20 pointer-events-none">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10 pointer-events-auto">
           <ArrowLeft size={20} />
         </button>
         <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2">
@@ -184,27 +177,24 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
           className="absolute inset-0 w-full h-full object-cover z-0"
         />
 
-        {/* Error Overlay */}
+        {/* Error Notification (Non-blocking) */}
         {error && (
-          <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8">
-            <div className="text-center max-w-sm">
-              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
-                <AlertCircle size={32} className="text-red-500" />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Scanner Error</h3>
-              <p className="text-zinc-400 text-sm mb-6">{error}</p>
-              <button 
-                onClick={() => setError(null)}
-                className="bg-lime-400 text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all w-full flex items-center justify-center gap-2"
-              >
-                <RefreshCw size={18} /> Resume Scanning
-              </button>
+          <div className="absolute top-24 left-6 right-6 z-30 animate-in slide-in-from-top duration-300">
+            <div className="bg-red-500/90 backdrop-blur-md text-white p-4 rounded-2xl border border-red-400/50 shadow-2xl flex items-center gap-4">
+               <AlertCircle size={24} className="shrink-0" />
+               <div className="flex-1">
+                 <p className="font-bold text-sm">Scan Failed</p>
+                 <p className="text-xs opacity-90">{error}</p>
+               </div>
+               <button onClick={() => setError(null)} className="p-2 bg-white/20 rounded-lg hover:bg-white/30">
+                 <RefreshCw size={16} />
+               </button>
             </div>
           </div>
         )}
         
         {/* Scanning Reticle */}
-        {!result && !error && (
+        {!result && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className={`w-64 h-64 border-2 rounded-[32px] relative transition-all duration-500 ${scanning ? 'border-lime-400 border-4 scale-105' : 'border-white/20'}`}>
               <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/60 px-4 py-1.5 rounded-full text-[9px] font-black text-white/80 uppercase tracking-[0.2em] border border-white/5 whitespace-nowrap backdrop-blur-sm">
@@ -220,8 +210,9 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
               {scanning && (
                 <div className="absolute inset-0 bg-lime-500/10 animate-pulse rounded-[32px] overflow-hidden">
                   <div className="h-0.5 w-full bg-lime-400 shadow-[0_0_20px_rgba(163,230,53,1)] absolute top-0 animate-[foodscan_2.5s_ease-in-out_infinite]"></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-lime-400 animate-pulse">Analyzing Macros...</div>
+                  <div className="absolute inset-0 flex items-center justify-center flex-col gap-2">
+                     <Loader2 size={32} className="text-lime-400 animate-spin" />
+                     <div className="text-[10px] font-black uppercase tracking-widest text-lime-400 animate-pulse">Analyzing...</div>
                   </div>
                 </div>
               )}
@@ -283,7 +274,7 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
       </div>
 
       {/* Control Bar */}
-      {!result && !error && (
+      {!result && (
         <div className="h-32 bg-black flex flex-col items-center justify-center px-6 pb-safe z-20">
           <button 
             onClick={handleScan}

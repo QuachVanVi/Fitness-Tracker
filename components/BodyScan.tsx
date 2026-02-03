@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ArrowLeft, Camera, RefreshCw, Zap, ShieldCheck, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Camera, RefreshCw, Zap, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { User } from '../types';
 
@@ -67,8 +67,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
     
     // Ensure video is ready
     if (videoRef.current.readyState !== 4) {
-      setError("Camera is loading...");
-      return;
+      return; 
     }
 
     setScanning(true);
@@ -82,14 +81,19 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
 
       const canvas = canvasRef.current;
       const video = videoRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      
+      // OPTIMIZATION: Scale image to max 800px
+      const MAX_WIDTH = 800;
+      const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
+      canvas.width = video.videoWidth * scale;
+      canvas.height = video.videoHeight * scale;
+      
       const ctx = canvas.getContext('2d');
+      // Draw image without mirroring for AI analysis (AI expects real orientation for text/details)
+      // Display mirroring is handled via CSS
+      ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
       
-      // Draw image without mirroring for AI analysis (AI expects real orientation)
-      ctx?.drawImage(video, 0, 0);
-      
-      const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+      const imageData = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
 
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
@@ -98,15 +102,8 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
           {
             parts: [
               {
-                text: `Analyze this person's physical health composition based on the visual input. 
-                User stats: Weight ${user.currentWeight} lbs.
-                Provide a JSON response with:
-                1. muscle_ratio (estimated percentage)
-                2. fat_percentage (estimated)
-                3. health_score (0-100)
-                4. visual_assessment (short text description)
-                5. recommendation (one tip).
-                Be encouraging and professional.`
+                text: `Analyze body composition. User weight: ${user.currentWeight}.
+                Return JSON: { muscle_ratio (%), fat_percentage (%), health_score (0-100), visual_assessment (short), recommendation (short tip) }`
               },
               {
                 inlineData: {
@@ -135,8 +132,8 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
   return (
     <div className="fixed inset-0 bg-black z-[100] flex flex-col text-white">
       {/* Overlay UI */}
-      <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-20">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10">
+      <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-20 pointer-events-none">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10 pointer-events-auto">
           <ArrowLeft size={20} />
         </button>
         <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2">
@@ -157,35 +154,34 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
           style={{ transform: 'rotateY(180deg)' }}
         />
 
-        {/* Error Overlay */}
+        {/* Error Notification (Non-blocking) */}
         {error && (
-          <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8">
-            <div className="text-center max-w-sm">
-              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
-                <AlertCircle size={32} className="text-red-500" />
-              </div>
-              <h3 className="text-xl font-bold mb-2">Analysis Error</h3>
-              <p className="text-zinc-400 text-sm mb-6">{error}</p>
-              <button 
-                onClick={() => setError(null)}
-                className="bg-lime-400 text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all w-full flex items-center justify-center gap-2"
-              >
-                 <RefreshCw size={18} /> Resume Scanning
-              </button>
+          <div className="absolute top-24 left-6 right-6 z-30 animate-in slide-in-from-top duration-300">
+            <div className="bg-red-500/90 backdrop-blur-md text-white p-4 rounded-2xl border border-red-400/50 shadow-2xl flex items-center gap-4">
+               <AlertCircle size={24} className="shrink-0" />
+               <div className="flex-1">
+                 <p className="font-bold text-sm">Scan Failed</p>
+                 <p className="text-xs opacity-90">{error}</p>
+               </div>
+               <button onClick={() => setError(null)} className="p-2 bg-white/20 rounded-lg hover:bg-white/30">
+                 <RefreshCw size={16} />
+               </button>
             </div>
           </div>
         )}
         
         {/* Scanning Frame */}
-        {!result && !error && (
+        {!result && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className={`w-72 h-96 border-2 rounded-[40px] relative transition-all duration-500 ${scanning ? 'border-lime-400 border-4' : 'border-white/30'}`}>
               <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/80 px-4 py-1.5 rounded-full text-[10px] font-bold text-white uppercase tracking-widest border border-white/10 backdrop-blur-sm">
                 Align Body
               </div>
               {scanning && (
-                <div className="absolute inset-0 bg-lime-500/10 animate-pulse rounded-[40px]">
+                <div className="absolute inset-0 bg-lime-500/10 animate-pulse rounded-[40px] flex items-center justify-center flex-col gap-2">
                   <div className="h-0.5 w-full bg-lime-400 shadow-[0_0_15px_rgba(163,230,53,0.8)] absolute top-0 animate-[scan_2s_ease-in-out_infinite]"></div>
+                  <Loader2 size={32} className="text-lime-400 animate-spin" />
+                  <div className="text-[10px] font-black uppercase tracking-widest text-lime-400 animate-pulse">Analyzing...</div>
                 </div>
               )}
             </div>
@@ -239,7 +235,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
 
       {/* Control Bar */}
       <div className="h-32 bg-black flex items-center justify-center px-6 z-20">
-        {!result && !error && (
+        {!result && (
           <button 
             onClick={handleScan}
             disabled={scanning}
