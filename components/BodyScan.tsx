@@ -48,7 +48,9 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
     try {
       const s = await navigator.mediaDevices.getUserMedia({ 
         video: { 
-          facingMode: 'user'
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         }, 
         audio: false 
       });
@@ -65,10 +67,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
   const handleScan = async () => {
     if (!videoRef.current || !canvasRef.current || !user) return;
     
-    // Ensure video is ready
-    if (videoRef.current.readyState !== 4) {
-      return; 
-    }
+    if (videoRef.current.readyState !== 4) return;
 
     setScanning(true);
     setResult(null);
@@ -82,48 +81,61 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
       const canvas = canvasRef.current;
       const video = videoRef.current;
       
-      // OPTIMIZATION: Scale image to max 800px
+      // Scale image to max 800px to ensure API accepts payload
       const MAX_WIDTH = 800;
       const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
       canvas.width = video.videoWidth * scale;
       canvas.height = video.videoHeight * scale;
       
       const ctx = canvas.getContext('2d');
-      // Draw image without mirroring for AI analysis (AI expects real orientation for text/details)
-      // Display mirroring is handled via CSS
-      ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      if (!ctx) throw new Error("Could not create canvas context");
       
-      const imageData = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      const imageData = canvas.toDataURL('image/jpeg', 0.6).split(',')[1]; // Lower quality slightly for speed
 
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
+      // Use single object for contents as per SDK recommendation
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: [
-          {
-            parts: [
-              {
-                text: `Analyze body composition. User weight: ${user.currentWeight}.
-                Return JSON: { muscle_ratio (%), fat_percentage (%), health_score (0-100), visual_assessment (short), recommendation (short tip) }`
-              },
-              {
-                inlineData: {
-                  mimeType: 'image/jpeg',
-                  data: imageData
-                }
+        contents: {
+          parts: [
+            {
+              text: `Act as a fitness coach. Estimate the body composition metrics for a person with weight ${user.currentWeight} lbs based on this image.
+              Return a strictly valid JSON object (no markdown formatting) with these fields:
+              - muscle_ratio (number, estimated percentage)
+              - fat_percentage (number, estimated percentage)
+              - health_score (number, 0-100 based on visible fitness)
+              - visual_assessment (string, 1 short sentence)
+              - recommendation (string, 1 actionable tip)`
+            },
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: imageData
               }
-            ]
-          }
-        ],
+            }
+          ]
+        },
         config: {
           responseMimeType: 'application/json'
         }
       });
 
-      const data = JSON.parse(response.text || '{}');
+      const text = response.text;
+      if (!text) throw new Error("No response from AI");
+
+      const data = JSON.parse(text);
       setResult(data);
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Analysis failed. Check internet connection.');
+      console.error("AI Error:", err);
+      // Show actual error message for debugging
+      let msg = err.message || 'Analysis failed.';
+      if (msg.includes('400')) msg = 'Bad Request: Image might be unclear or policy violation.';
+      if (msg.includes('429')) msg = 'Too many requests. Please wait.';
+      if (msg.includes('500')) msg = 'Server error. Try again later.';
+      setError(msg);
     } finally {
       setScanning(false);
     }
@@ -144,7 +156,6 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-zinc-900 flex flex-col items-center justify-center">
-        {/* Video always visible to avoid black screen on error */}
         <video 
           ref={videoRef} 
           autoPlay 
@@ -159,11 +170,11 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
           <div className="absolute top-24 left-6 right-6 z-30 animate-in slide-in-from-top duration-300">
             <div className="bg-red-500/90 backdrop-blur-md text-white p-4 rounded-2xl border border-red-400/50 shadow-2xl flex items-center gap-4">
                <AlertCircle size={24} className="shrink-0" />
-               <div className="flex-1">
+               <div className="flex-1 min-w-0">
                  <p className="font-bold text-sm">Scan Failed</p>
-                 <p className="text-xs opacity-90">{error}</p>
+                 <p className="text-xs opacity-90 truncate">{error}</p>
                </div>
-               <button onClick={() => setError(null)} className="p-2 bg-white/20 rounded-lg hover:bg-white/30">
+               <button onClick={() => setError(null)} className="p-2 bg-white/20 rounded-lg hover:bg-white/30 pointer-events-auto">
                  <RefreshCw size={16} />
                </button>
             </div>

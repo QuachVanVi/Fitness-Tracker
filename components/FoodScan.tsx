@@ -49,7 +49,9 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
     try {
       const s = await navigator.mediaDevices.getUserMedia({ 
         video: { 
-          facingMode: 'environment'
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         }, 
         audio: false 
       });
@@ -66,9 +68,7 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
   const handleScan = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     
-    if (videoRef.current.readyState !== 4) {
-      return; // Wait for camera
-    }
+    if (videoRef.current.readyState !== 4) return;
 
     setScanning(true);
     setResult(null);
@@ -82,54 +82,63 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
       
-      // OPTIMIZATION: Downscale image to max 800px width to speed up API and prevent timeouts
       const MAX_WIDTH = 800;
       const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
       canvas.width = video.videoWidth * scale;
       canvas.height = video.videoHeight * scale;
       
       const ctx = canvas.getContext('2d');
-      ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+      if (!ctx) throw new Error("Could not create canvas context");
       
-      const imageData = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      const imageData = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
 
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: [
-          {
-            parts: [
-              {
-                text: `Analyze this image. 
-                1. Is it food/drink? (true/false)
-                2. If yes, estimate name, calories, protein(g), carbs(g), fat(g).
-                3. Short reasoning.
-                Return JSON: { isFood, name, calories, protein, carbs, fat, confidence, reasoning }`
-              },
-              {
-                inlineData: {
-                  mimeType: 'image/jpeg',
-                  data: imageData
-                }
+        contents: {
+          parts: [
+            {
+              text: `Identify the food in this image.
+              Return a strictly valid JSON object (no markdown) with:
+              - isFood (boolean)
+              - name (string)
+              - calories (number, estimate)
+              - protein (number, grams)
+              - carbs (number, grams)
+              - fat (number, grams)
+              - confidence (number, 0-1)
+              - reasoning (string, short)`
+            },
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: imageData
               }
-            ]
-          }
-        ],
+            }
+          ]
+        },
         config: {
           responseMimeType: 'application/json'
         }
       });
 
-      const data = JSON.parse(response.text || '{}');
+      const text = response.text;
+      if (!text) throw new Error("No response from AI");
+
+      const data = JSON.parse(text);
       
       if (data.isFood === false) {
-        setError("Not recognized as food. Try getting closer or better lighting.");
+        setError("Not recognized as food. Try getting closer.");
       } else {
         setResult(data);
       }
     } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Connection failed. Please try again.');
+      console.error("AI Error:", err);
+      let msg = err.message || 'Scan failed.';
+      if (msg.includes('400')) msg = 'Bad Request: Image unclear.';
+      setError(msg);
     } finally {
       setScanning(false);
     }
@@ -168,7 +177,6 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-zinc-900 flex flex-col items-center justify-center">
-        {/* Video always renders to avoid flicker */}
         <video 
           ref={videoRef} 
           autoPlay 
@@ -182,11 +190,11 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
           <div className="absolute top-24 left-6 right-6 z-30 animate-in slide-in-from-top duration-300">
             <div className="bg-red-500/90 backdrop-blur-md text-white p-4 rounded-2xl border border-red-400/50 shadow-2xl flex items-center gap-4">
                <AlertCircle size={24} className="shrink-0" />
-               <div className="flex-1">
+               <div className="flex-1 min-w-0">
                  <p className="font-bold text-sm">Scan Failed</p>
-                 <p className="text-xs opacity-90">{error}</p>
+                 <p className="text-xs opacity-90 truncate">{error}</p>
                </div>
-               <button onClick={() => setError(null)} className="p-2 bg-white/20 rounded-lg hover:bg-white/30">
+               <button onClick={() => setError(null)} className="p-2 bg-white/20 rounded-lg hover:bg-white/30 pointer-events-auto">
                  <RefreshCw size={16} />
                </button>
             </div>
