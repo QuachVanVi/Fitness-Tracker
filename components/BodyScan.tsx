@@ -63,7 +63,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
     } catch (err: any) {
       console.error("Camera Error:", err);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setError('Camera permission denied. Please allow access in settings.');
+        setError('Permission denied. Go to Settings > Apps > FitTrack Pro > Permissions to enable Camera.');
       } else if (err.name === 'NotFoundError') {
         setError('No camera found on this device.');
       } else if (err.name === 'NotReadableError') {

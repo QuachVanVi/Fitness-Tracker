@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ArrowLeft, Camera, RefreshCw, Zap, ShieldCheck, Check, Search, ChefHat, Flame, Coffee, Sun, Moon, Pizza, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Camera, RefreshCw, Zap, ShieldCheck, Check, Search, ChefHat, Flame, Coffee, Sun, Moon, Pizza, AlertCircle, Settings } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { LoggedMeal } from '../types';
 
@@ -64,7 +64,7 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
     } catch (err: any) {
       console.error("Camera Error:", err);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setError('Permission denied. Please allow camera access in settings.');
+        setError('Permission denied. Go to Settings > Apps > FitTrack Pro > Permissions to enable Camera.');
       } else if (err.name === 'NotFoundError') {
         setError('No back camera found.');
       } else if (err.name === 'NotReadableError') {
@@ -192,12 +192,14 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
             </div>
             <h3 className="text-xl font-bold mb-2">Scanner Error</h3>
             <p className="text-zinc-400 text-sm mb-6">{error}</p>
-            <button 
-              onClick={() => startCamera()}
-              className="bg-lime-400 text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all w-full flex items-center justify-center gap-2"
-            >
-               <RefreshCw size={18} /> Try Again
-            </button>
+            <div className="space-y-3">
+              <button 
+                onClick={() => startCamera()}
+                className="bg-lime-400 text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all w-full flex items-center justify-center gap-2"
+              >
+                <RefreshCw size={18} /> Try Again
+              </button>
+            </div>
           </div>
         )}
         
@@ -339,7 +341,7 @@ const CategoryBtn = ({ icon, label, onClick }: { icon: React.ReactNode, label: s
     <div className="w-12 h-12 rounded-2xl bg-zinc-800 flex items-center justify-center text-zinc-500 group-hover:text-lime-400 group-hover:bg-zinc-900 transition-all">
       {icon}
     </div>
-    <span className="font-black text-[10px] uppercase tracking-widest">{label}</span>
+    <span className="font-black text-xs uppercase tracking-widest">{label}</span>
   </button>
 );
 

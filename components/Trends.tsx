@@ -1,12 +1,12 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area,
   BarChart, Bar, Cell
 } from 'recharts';
 import { User, LoggedMeal } from '../types';
-import { MOCK_WEIGHT_HISTORY, MOCK_CALORIE_INTAKE } from '../constants';
-import { Trophy, Flame, Zap, MoreHorizontal, ArrowLeft } from 'lucide-react';
+import { MOCK_WEIGHT_HISTORY, MOCK_HISTORY_DATA } from '../constants';
+import { Trophy, Flame, Zap, MoreHorizontal, ArrowLeft, Beef } from 'lucide-react';
 
 interface Props {
   user: User | null;
@@ -14,11 +14,19 @@ interface Props {
 }
 
 const Trends: React.FC<Props> = ({ user, logs }) => {
+  const [viewMode, setViewMode] = useState<'Week' | 'Month' | 'Year'>('Week');
+  
   const weightLabel = user?.units === 'Imperial' ? 'lbs' : 'kg';
   const displayWeight = user?.currentWeight || 155;
 
+  const currentData = MOCK_HISTORY_DATA[viewMode];
+  
+  // Averages calculations
+  const avgCals = Math.round(currentData.calories.reduce((a, b) => a + b.value, 0) / currentData.calories.length);
+  const avgPro = Math.round(currentData.protein.reduce((a, b) => a + b.value, 0) / currentData.protein.length);
+
   return (
-    <div className="p-6">
+    <div className="p-6 pb-32">
       <header className="flex items-center justify-between mb-8">
         <button className="p-2"><ArrowLeft size={24} /></button>
         <h1 className="text-xl font-bold">Your Progress Trends</h1>
@@ -27,9 +35,19 @@ const Trends: React.FC<Props> = ({ user, logs }) => {
 
       {/* Time Tabs */}
       <div className="flex bg-zinc-900 rounded-xl p-1 mb-8">
-        <button className="flex-1 py-2 rounded-lg bg-zinc-800 text-sm font-medium">Week</button>
-        <button className="flex-1 py-2 rounded-lg text-zinc-500 text-sm font-medium">Month</button>
-        <button className="flex-1 py-2 rounded-lg text-zinc-500 text-sm font-medium">Year</button>
+        {(['Week', 'Month', 'Year'] as const).map((period) => (
+          <button
+            key={period}
+            onClick={() => setViewMode(period)}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+              viewMode === period 
+                ? 'bg-zinc-800 text-white shadow-lg' 
+                : 'text-zinc-500 hover:text-zinc-300'
+            }`}
+          >
+            {period}
+          </button>
+        ))}
       </div>
 
       {/* Weight History Card */}
@@ -41,7 +59,7 @@ const Trends: React.FC<Props> = ({ user, logs }) => {
               <span className="text-3xl font-bold">{displayWeight}</span>
               <span className="text-zinc-500 font-medium">{weightLabel}</span>
             </div>
-            <p className="text-zinc-500 text-[10px] mt-1">Last 7 Days vs Previous</p>
+            <p className="text-zinc-500 text-[10px] mt-1">Trend over time</p>
           </div>
           <div className="bg-red-950/30 text-red-400 px-3 py-1 rounded-full text-xs font-bold border border-red-900/50 flex items-center gap-1">
             <span className="text-[10px] transform rotate-180">▲</span> -1.2 {weightLabel}
@@ -79,35 +97,84 @@ const Trends: React.FC<Props> = ({ user, logs }) => {
         </div>
       </div>
 
-      {/* Calorie Intake Card */}
-      <div className="bg-[#121212] rounded-3xl p-6 mb-8 border border-zinc-900">
+      {/* Protein Intake Card - NEW */}
+      <div className="bg-[#121212] rounded-3xl p-6 mb-6 border border-zinc-900">
         <div className="flex justify-between items-start mb-2">
           <div>
-            <h2 className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Calorie Intake</h2>
+            <h2 className="text-zinc-500 text-xs font-semibold uppercase tracking-wider flex items-center gap-2">
+              <Beef size={14} className="text-lime-400"/> Protein Intake
+            </h2>
             <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-3xl font-bold">1,850</span>
-              <span className="text-zinc-500 font-medium">kcal avg</span>
+              <span className="text-3xl font-bold">{avgPro}</span>
+              <span className="text-zinc-500 font-medium">g avg</span>
             </div>
-            <p className="text-zinc-500 text-[10px] mt-1">Daily breakdown</p>
+            <p className="text-zinc-500 text-[10px] mt-1">
+              {viewMode === 'Week' ? 'Daily Average' : viewMode === 'Month' ? 'Weekly Average' : 'Monthly Average'}
+            </p>
           </div>
-          <div className="bg-green-950/30 text-lime-400 px-3 py-1 rounded-full text-xs font-bold border border-lime-900/50 flex items-center gap-1">
-            <span>📈</span> +50 kcal
+          <div className="bg-lime-950/30 text-lime-400 px-3 py-1 rounded-full text-xs font-bold border border-lime-900/50 flex items-center gap-1">
+            <span>💪</span> High
           </div>
         </div>
 
         <div className="h-48 w-full mt-4">
           <ResponsiveContainer width="100%" height={192}>
-            <BarChart data={MOCK_CALORIE_INTAKE}>
+            <BarChart data={currentData.protein}>
               <XAxis 
-                dataKey="day" 
+                dataKey="label" 
                 axisLine={false} 
                 tickLine={false} 
                 tick={{fill: '#555', fontSize: 10}} 
                 dy={10}
               />
-              <Bar dataKey="kcal" radius={[4, 4, 0, 0]}>
-                {MOCK_CALORIE_INTAKE.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.highlight ? '#22d3ee' : '#3b82f6'} fillOpacity={0.9} />
+              <Tooltip 
+                cursor={{fill: '#ffffff10'}}
+                contentStyle={{backgroundColor: '#000', border: '1px solid #333', borderRadius: '12px', fontSize: '12px'}} 
+              />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                {currentData.protein.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.highlight ? '#a3e635' : '#3f6212'} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Calorie Intake Card */}
+      <div className="bg-[#121212] rounded-3xl p-6 mb-8 border border-zinc-900">
+        <div className="flex justify-between items-start mb-2">
+          <div>
+            <h2 className="text-zinc-500 text-xs font-semibold uppercase tracking-wider flex items-center gap-2">
+               <Flame size={14} className="text-blue-400"/> Calorie Intake
+            </h2>
+            <div className="flex items-baseline gap-1 mt-1">
+              <span className="text-3xl font-bold">{avgCals.toLocaleString()}</span>
+              <span className="text-zinc-500 font-medium">kcal avg</span>
+            </div>
+            <p className="text-zinc-500 text-[10px] mt-1">
+              {viewMode === 'Week' ? 'Daily Average' : viewMode === 'Month' ? 'Weekly Total' : 'Monthly Total'}
+            </p>
+          </div>
+        </div>
+
+        <div className="h-48 w-full mt-4">
+          <ResponsiveContainer width="100%" height={192}>
+            <BarChart data={currentData.calories}>
+              <XAxis 
+                dataKey="label" 
+                axisLine={false} 
+                tickLine={false} 
+                tick={{fill: '#555', fontSize: 10}} 
+                dy={10}
+              />
+              <Tooltip 
+                cursor={{fill: '#ffffff10'}}
+                contentStyle={{backgroundColor: '#000', border: '1px solid #333', borderRadius: '12px', fontSize: '12px'}} 
+              />
+              <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                {currentData.calories.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.highlight ? '#22d3ee' : '#1e3a8a'} />
                 ))}
               </Bar>
             </BarChart>

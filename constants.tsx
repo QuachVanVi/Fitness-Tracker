@@ -207,12 +207,38 @@ export const MOCK_WEIGHT_HISTORY: WeightRecord[] = [
   { date: 'SUN', weight: 155.0 },
 ];
 
-export const MOCK_CALORIE_INTAKE = [
-  { day: 'M', kcal: 2100 },
-  { day: 'T', kcal: 1800 },
-  { day: 'W', kcal: 2400, highlight: true },
-  { day: 'T', kcal: 1950 },
-  { day: 'F', kcal: 2200 },
-  { day: 'S', kcal: 1750 },
-  { day: 'S', kcal: 2000 },
-];
+export const MOCK_HISTORY_DATA = {
+  Week: {
+    calories: [
+      { label: 'M', value: 2100 }, { label: 'T', value: 1800 }, { label: 'W', value: 2450, highlight: true },
+      { label: 'T', value: 1950 }, { label: 'F', value: 2300 }, { label: 'S', value: 1750 }, { label: 'S', value: 2100 }
+    ],
+    protein: [
+      { label: 'M', value: 145 }, { label: 'T', value: 130 }, { label: 'W', value: 165, highlight: true },
+      { label: 'T', value: 140 }, { label: 'F', value: 155 }, { label: 'S', value: 120 }, { label: 'S', value: 145 }
+    ]
+  },
+  Month: {
+    calories: [
+      { label: 'W1', value: 14200 }, { label: 'W2', value: 15100, highlight: true },
+      { label: 'W3', value: 14800 }, { label: 'W4', value: 15400 }
+    ],
+    protein: [
+      { label: 'W1', value: 980 }, { label: 'W2', value: 1050, highlight: true },
+      { label: 'W3', value: 1010 }, { label: 'W4', value: 1080 }
+    ]
+  },
+  Year: {
+    calories: [
+      { label: 'Jan', value: 62000 }, { label: 'Feb', value: 59000 }, { label: 'Mar', value: 63000 },
+      { label: 'Apr', value: 61000 }, { label: 'May', value: 64000 }, { label: 'Jun', value: 65000, highlight: true }
+    ],
+    protein: [
+      { label: 'Jan', value: 4200 }, { label: 'Feb', value: 4100 }, { label: 'Mar', value: 4400 },
+      { label: 'Apr', value: 4300 }, { label: 'May', value: 4500 }, { label: 'Jun', value: 4600, highlight: true }
+    ]
+  }
+};
+
+// Deprecated but kept for backward compatibility if needed, aliased to Week data
+export const MOCK_CALORIE_INTAKE = MOCK_HISTORY_DATA.Week.calories.map(d => ({ day: d.label, kcal: d.value, highlight: d.highlight }));
