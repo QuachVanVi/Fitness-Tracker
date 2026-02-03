@@ -16,6 +16,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
 
   useEffect(() => {
     startCamera();
@@ -28,17 +29,14 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
+      setCameraReady(false);
     }
   };
 
   const startCamera = async () => {
     setError(null);
+    setCameraReady(false);
     stopCamera();
-
-    if (!window.isSecureContext) {
-      setError('Camera requires HTTPS/Secure Context.');
-      return;
-    }
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setError('Camera API not supported.');
@@ -46,17 +44,21 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
     }
 
     try {
+      // Allow browser to choose best resolution for the device (avoids portrait/landscape issues)
       const s = await navigator.mediaDevices.getUserMedia({ 
         video: { 
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          facingMode: 'user'
         }, 
         audio: false 
       });
       setStream(s);
       if (videoRef.current) {
         videoRef.current.srcObject = s;
+        // Wait for video dimensions to be known
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(e => console.error("Play error", e));
+          setCameraReady(true);
+        };
       }
     } catch (err: any) {
       console.error("Camera Error:", err);
@@ -65,9 +67,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
   };
 
   const handleScan = async () => {
-    if (!videoRef.current || !canvasRef.current || !user) return;
-    
-    if (videoRef.current.readyState !== 4) return;
+    if (!videoRef.current || !canvasRef.current || !user || !cameraReady) return;
 
     setScanning(true);
     setResult(null);
@@ -81,22 +81,36 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
       const canvas = canvasRef.current;
       const video = videoRef.current;
       
-      // Scale image to max 800px to ensure API accepts payload
-      const MAX_WIDTH = 800;
-      const scale = Math.min(1, MAX_WIDTH / video.videoWidth);
-      canvas.width = video.videoWidth * scale;
-      canvas.height = video.videoHeight * scale;
+      const MAX_SIZE = 800;
+      let width = video.videoWidth;
+      let height = video.videoHeight;
       
-      const ctx = canvas.getContext('2d');
+      // Scale down while maintaining aspect ratio
+      if (width > height) {
+        if (width > MAX_SIZE) {
+          height = height * (MAX_SIZE / width);
+          width = MAX_SIZE;
+        }
+      } else {
+        if (height > MAX_SIZE) {
+          width = width * (MAX_SIZE / height);
+          height = MAX_SIZE;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) throw new Error("Could not create canvas context");
       
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // Draw image without CSS mirroring (send real pixels to AI)
+      ctx.drawImage(video, 0, 0, width, height);
       
-      const imageData = canvas.toDataURL('image/jpeg', 0.6).split(',')[1]; // Lower quality slightly for speed
+      const imageData = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
 
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      // Use single object for contents as per SDK recommendation
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: {
@@ -123,18 +137,16 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
         }
       });
 
-      const text = response.text;
-      if (!text) throw new Error("No response from AI");
+      let text = response.text || '{}';
+      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
 
       const data = JSON.parse(text);
       setResult(data);
     } catch (err: any) {
       console.error("AI Error:", err);
-      // Show actual error message for debugging
       let msg = err.message || 'Analysis failed.';
-      if (msg.includes('400')) msg = 'Bad Request: Image might be unclear or policy violation.';
+      if (msg.includes('400')) msg = 'Bad Request: Image might be unclear.';
       if (msg.includes('429')) msg = 'Too many requests. Please wait.';
-      if (msg.includes('500')) msg = 'Server error. Try again later.';
       setError(msg);
     } finally {
       setScanning(false);
@@ -145,7 +157,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
     <div className="fixed inset-0 bg-black z-[100] flex flex-col text-white">
       {/* Overlay UI */}
       <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-20 pointer-events-none">
-        <button onClick={onBack} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10 pointer-events-auto">
+        <button onClick={onBack} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10 pointer-events-auto active:scale-95 transition-transform">
           <ArrowLeft size={20} />
         </button>
         <div className="bg-black/40 backdrop-blur-md px-4 py-2 rounded-full border border-white/10 flex items-center gap-2">
@@ -167,7 +179,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
 
         {/* Error Notification (Non-blocking) */}
         {error && (
-          <div className="absolute top-24 left-6 right-6 z-30 animate-in slide-in-from-top duration-300">
+          <div className="absolute top-24 left-6 right-6 z-30 animate-in slide-in-from-top duration-300 pointer-events-auto">
             <div className="bg-red-500/90 backdrop-blur-md text-white p-4 rounded-2xl border border-red-400/50 shadow-2xl flex items-center gap-4">
                <AlertCircle size={24} className="shrink-0" />
                <div className="flex-1 min-w-0">
@@ -249,11 +261,17 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
         {!result && (
           <button 
             onClick={handleScan}
-            disabled={scanning}
-            className="w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition-all active:scale-90 disabled:opacity-50"
+            disabled={scanning || !cameraReady}
+            className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all active:scale-90 ${cameraReady ? 'border-white opacity-100' : 'border-zinc-700 opacity-50'}`}
           >
-            <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-black">
-              {scanning ? <RefreshCw size={24} className="animate-spin" /> : <Camera size={24} />}
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center text-black transition-colors ${cameraReady ? 'bg-white' : 'bg-zinc-800'}`}>
+              {scanning ? (
+                <Loader2 size={24} className="animate-spin text-black" />
+              ) : !cameraReady ? (
+                <Loader2 size={24} className="animate-spin text-zinc-500" />
+              ) : (
+                <Camera size={24} />
+              )}
             </div>
           </button>
         )}
