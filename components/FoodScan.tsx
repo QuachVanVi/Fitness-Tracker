@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ArrowLeft, Camera, RefreshCw, Zap, ShieldCheck, Check, Search, ChefHat, Flame, Coffee, Sun, Moon, Pizza, AlertCircle, Settings } from 'lucide-react';
+import { ArrowLeft, Camera, RefreshCw, Check, ChefHat, AlertCircle, Coffee, Sun, Moon, Pizza } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { LoggedMeal } from '../types';
 
@@ -36,20 +36,17 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
     setError(null);
     stopCamera();
 
-    // 1. Check for Secure Context
     if (!window.isSecureContext) {
-      setError('Camera requires HTTPS. Mobile browsers block camera on insecure connections (http://192...).');
+      setError('Camera requires HTTPS/Secure Context.');
       return;
     }
 
-    // 2. Check Browser Support
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError('Camera API not supported in this browser.');
+      setError('Camera API not supported.');
       return;
     }
 
     try {
-      // Relaxed constraints for better emulator compatibility
       const s = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           facingMode: 'environment'
@@ -62,35 +59,37 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
       }
     } catch (err: any) {
       console.error("Camera Error:", err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setError('Camera permission denied. If "Permissions" in Settings says "No permissions requested", please reinstall the app.');
-      } else if (err.name === 'NotFoundError') {
-        setError('No back camera found.');
-      } else if (err.name === 'NotReadableError') {
-        setError('Camera is in use by another app.');
-      } else {
-        setError('Camera error: ' + (err.message || 'Unknown'));
-      }
+      setError('Camera access denied. Please check device settings.');
     }
   };
 
   const handleScan = async () => {
     if (!videoRef.current || !canvasRef.current) return;
     
+    // Ensure video is actually playing and has data
+    if (videoRef.current.readyState !== 4) {
+      setError("Camera is loading, please wait...");
+      return;
+    }
+
     setScanning(true);
     setResult(null);
     setError(null);
 
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx?.drawImage(video, 0, 0);
-    
-    const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-
     try {
+      if (!process.env.API_KEY) {
+        throw new Error("API Key is missing in app configuration.");
+      }
+
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(video, 0, 0);
+      
+      const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -135,9 +134,9 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
       } else {
         setResult(data);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('AI Analysis failed. Please ensure the food is clearly visible.');
+      setError(err.message || 'AI Analysis failed. Check internet connection.');
     } finally {
       setScanning(false);
     }
@@ -164,7 +163,7 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
   return (
     <div className="fixed inset-0 bg-black z-[150] flex flex-col text-white">
       {/* Overlay UI */}
-      <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-10">
+      <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-20">
         <button onClick={onBack} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10">
           <ArrowLeft size={20} />
         </button>
@@ -176,35 +175,37 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-zinc-900 flex flex-col items-center justify-center">
-        {!error ? (
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
-            className="w-full h-full object-cover"
-          />
-        ) : (
-          <div className="p-8 text-center max-w-sm">
-            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
-              <AlertCircle size={32} className="text-red-500" />
-            </div>
-            <h3 className="text-xl font-bold mb-2">Scanner Error</h3>
-            <p className="text-zinc-400 text-sm mb-6">{error}</p>
-            <div className="space-y-3">
+        {/* Video always renders to avoid flicker */}
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          playsInline 
+          muted 
+          className="absolute inset-0 w-full h-full object-cover z-0"
+        />
+
+        {/* Error Overlay */}
+        {error && (
+          <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8">
+            <div className="text-center max-w-sm">
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                <AlertCircle size={32} className="text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">Scanner Error</h3>
+              <p className="text-zinc-400 text-sm mb-6">{error}</p>
               <button 
-                onClick={() => startCamera()}
+                onClick={() => setError(null)}
                 className="bg-lime-400 text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all w-full flex items-center justify-center gap-2"
               >
-                <RefreshCw size={18} /> Try Again
+                <RefreshCw size={18} /> Resume Scanning
               </button>
             </div>
           </div>
         )}
         
-        {/* Scanning Overlay */}
+        {/* Scanning Reticle */}
         {!result && !error && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className={`w-64 h-64 border-2 rounded-[32px] relative transition-all duration-500 ${scanning ? 'border-lime-400 border-4 scale-105' : 'border-white/20'}`}>
               <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/60 px-4 py-1.5 rounded-full text-[9px] font-black text-white/80 uppercase tracking-[0.2em] border border-white/5 whitespace-nowrap backdrop-blur-sm">
                 Scan your plate
@@ -232,7 +233,7 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
 
         {/* Results Card */}
         {result && (
-          <div className="absolute bottom-10 left-6 right-6 bg-[#121212]/95 backdrop-blur-xl border border-zinc-800 rounded-[32px] p-6 animate-in slide-in-from-bottom duration-500 shadow-2xl">
+          <div className="absolute bottom-10 left-6 right-6 bg-[#121212]/95 backdrop-blur-xl border border-zinc-800 rounded-[32px] p-6 animate-in slide-in-from-bottom duration-500 shadow-2xl z-20">
             <div className="flex justify-between items-start mb-6">
               <div className="flex-1 pr-4">
                 <div className="flex items-center gap-2 mb-1">
@@ -283,7 +284,7 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
 
       {/* Control Bar */}
       {!result && !error && (
-        <div className="h-32 bg-black flex flex-col items-center justify-center px-6 pb-safe">
+        <div className="h-32 bg-black flex flex-col items-center justify-center px-6 pb-safe z-20">
           <button 
             onClick={handleScan}
             disabled={scanning}

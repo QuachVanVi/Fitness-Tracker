@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { ArrowLeft, Camera, RefreshCw, Zap, ShieldCheck, AlertCircle, Settings } from 'lucide-react';
+import { ArrowLeft, Camera, RefreshCw, Zap, ShieldCheck, AlertCircle } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { User } from '../types';
 
@@ -35,21 +35,17 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
     setError(null);
     stopCamera();
 
-    // 1. Check for Secure Context (Required for mobile browsers)
     if (!window.isSecureContext) {
-      setError('Camera requires a secure connection (HTTPS). If testing on mobile via IP, browser security blocks access.');
+      setError('Camera requires HTTPS/Secure Context.');
       return;
     }
 
-    // 2. Check Browser Support
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError('Camera API is not supported in this browser.');
+      setError('Camera API not supported.');
       return;
     }
 
     try {
-      // Relaxed constraints to allow Emulator to pick its native resolution
-      // instead of forcing 1280x720 which might cause failing/scaling issues.
       const s = await navigator.mediaDevices.getUserMedia({ 
         video: { 
           facingMode: 'user'
@@ -62,37 +58,39 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
       }
     } catch (err: any) {
       console.error("Camera Error:", err);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setError('Permission denied. Go to Settings > Apps > FitTrack Pro > Permissions to enable Camera.');
-      } else if (err.name === 'NotFoundError') {
-        setError('No camera found on this device.');
-      } else if (err.name === 'NotReadableError') {
-        setError('Camera is in use by another app.');
-      } else {
-        setError('Unable to access camera. Please restart the app.');
-      }
+      setError('Camera access denied. Please check settings.');
     }
   };
 
   const handleScan = async () => {
     if (!videoRef.current || !canvasRef.current || !user) return;
     
+    // Ensure video is ready
+    if (videoRef.current.readyState !== 4) {
+      setError("Camera is loading...");
+      return;
+    }
+
     setScanning(true);
     setResult(null);
     setError(null);
 
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    
-    // Draw image without mirroring for AI analysis (AI expects real orientation)
-    ctx?.drawImage(video, 0, 0);
-    
-    const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-
     try {
+      if (!process.env.API_KEY) {
+        throw new Error("API Key is missing in app configuration.");
+      }
+
+      const canvas = canvasRef.current;
+      const video = videoRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      
+      // Draw image without mirroring for AI analysis (AI expects real orientation)
+      ctx?.drawImage(video, 0, 0);
+      
+      const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -126,9 +124,9 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
 
       const data = JSON.parse(response.text || '{}');
       setResult(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError('Analysis failed. Please try again in better lighting.');
+      setError(err.message || 'Analysis failed. Check internet connection.');
     } finally {
       setScanning(false);
     }
@@ -137,7 +135,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
   return (
     <div className="fixed inset-0 bg-black z-[100] flex flex-col text-white">
       {/* Overlay UI */}
-      <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-10">
+      <div className="absolute top-0 left-0 right-0 p-6 flex items-center justify-between z-20">
         <button onClick={onBack} className="w-10 h-10 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center border border-white/10">
           <ArrowLeft size={20} />
         </button>
@@ -149,35 +147,38 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
       </div>
 
       <div className="flex-1 relative overflow-hidden bg-zinc-900 flex flex-col items-center justify-center">
-        {!error ? (
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
-            // Using rotateY(180deg) is often smoother than scale-x-[-1] on mobile GPUs
-            className="w-full h-full object-cover"
-            style={{ transform: 'rotateY(180deg)' }}
-          />
-        ) : (
-          <div className="p-8 text-center max-w-sm">
-            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
-              <AlertCircle size={32} className="text-red-500" />
+        {/* Video always visible to avoid black screen on error */}
+        <video 
+          ref={videoRef} 
+          autoPlay 
+          playsInline 
+          muted 
+          className="absolute inset-0 w-full h-full object-cover z-0"
+          style={{ transform: 'rotateY(180deg)' }}
+        />
+
+        {/* Error Overlay */}
+        {error && (
+          <div className="absolute inset-0 z-30 bg-black/80 backdrop-blur-sm flex items-center justify-center p-8">
+            <div className="text-center max-w-sm">
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                <AlertCircle size={32} className="text-red-500" />
+              </div>
+              <h3 className="text-xl font-bold mb-2">Analysis Error</h3>
+              <p className="text-zinc-400 text-sm mb-6">{error}</p>
+              <button 
+                onClick={() => setError(null)}
+                className="bg-lime-400 text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all w-full flex items-center justify-center gap-2"
+              >
+                 <RefreshCw size={18} /> Resume Scanning
+              </button>
             </div>
-            <h3 className="text-xl font-bold mb-2">Camera Error</h3>
-            <p className="text-zinc-400 text-sm mb-6">{error}</p>
-            <button 
-              onClick={() => startCamera()}
-              className="bg-lime-400 text-black px-6 py-3 rounded-xl font-bold text-sm active:scale-95 transition-all w-full flex items-center justify-center gap-2"
-            >
-               <RefreshCw size={18} /> Try Again
-            </button>
           </div>
         )}
         
         {/* Scanning Frame */}
         {!result && !error && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
             <div className={`w-72 h-96 border-2 rounded-[40px] relative transition-all duration-500 ${scanning ? 'border-lime-400 border-4' : 'border-white/30'}`}>
               <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/80 px-4 py-1.5 rounded-full text-[10px] font-bold text-white uppercase tracking-widest border border-white/10 backdrop-blur-sm">
                 Align Body
@@ -195,7 +196,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
 
         {/* Results Card */}
         {result && (
-          <div className="absolute bottom-32 left-6 right-6 bg-[#121212]/95 backdrop-blur-xl border border-zinc-800 rounded-3xl p-6 animate-in slide-in-from-bottom duration-500">
+          <div className="absolute bottom-32 left-6 right-6 bg-[#121212]/95 backdrop-blur-xl border border-zinc-800 rounded-3xl p-6 animate-in slide-in-from-bottom duration-500 z-20">
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h3 className="text-2xl font-black">Scan Complete</h3>
@@ -237,7 +238,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
       </div>
 
       {/* Control Bar */}
-      <div className="h-32 bg-black flex items-center justify-center px-6">
+      <div className="h-32 bg-black flex items-center justify-center px-6 z-20">
         {!result && !error && (
           <button 
             onClick={handleScan}
