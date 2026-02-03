@@ -48,11 +48,11 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
     }
 
     try {
+      // Relaxed constraints to allow Emulator to pick its native resolution
+      // instead of forcing 1280x720 which might cause failing/scaling issues.
       const s = await navigator.mediaDevices.getUserMedia({ 
         video: { 
-          facingMode: 'user',
-          width: { ideal: 1280 },
-          height: { ideal: 720 }
+          facingMode: 'user'
         }, 
         audio: false 
       });
@@ -86,6 +86,8 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     const ctx = canvas.getContext('2d');
+    
+    // Draw image without mirroring for AI analysis (AI expects real orientation)
     ctx?.drawImage(video, 0, 0);
     
     const imageData = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
@@ -153,7 +155,9 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
             autoPlay 
             playsInline 
             muted 
-            className="w-full h-full object-cover scale-x-[-1]"
+            // Using rotateY(180deg) is often smoother than scale-x-[-1] on mobile GPUs
+            className="w-full h-full object-cover"
+            style={{ transform: 'rotateY(180deg)' }}
           />
         ) : (
           <div className="p-8 text-center max-w-sm">
@@ -175,7 +179,7 @@ const BodyScan: React.FC<Props> = ({ user, onBack }) => {
         {!result && !error && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className={`w-72 h-96 border-2 rounded-[40px] relative transition-all duration-500 ${scanning ? 'border-lime-400 border-4' : 'border-white/30'}`}>
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black px-4 py-1 rounded-full text-[10px] font-bold text-zinc-500 uppercase tracking-widest border border-white/10">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-black/80 px-4 py-1.5 rounded-full text-[10px] font-bold text-white uppercase tracking-widest border border-white/10 backdrop-blur-sm">
                 Align Body
               </div>
               {scanning && (

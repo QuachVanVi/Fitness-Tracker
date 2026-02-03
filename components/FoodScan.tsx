@@ -49,11 +49,10 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
     }
 
     try {
+      // Relaxed constraints for better emulator compatibility
       const s = await navigator.mediaDevices.getUserMedia({ 
         video: { 
-          facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 } 
+          facingMode: 'environment'
         }, 
         audio: false 
       });
@@ -207,7 +206,7 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
         {!result && !error && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <div className={`w-64 h-64 border-2 rounded-[32px] relative transition-all duration-500 ${scanning ? 'border-lime-400 border-4 scale-105' : 'border-white/20'}`}>
-              <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/60 px-4 py-1.5 rounded-full text-[9px] font-black text-white/80 uppercase tracking-[0.2em] border border-white/5 whitespace-nowrap">
+              <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/60 px-4 py-1.5 rounded-full text-[9px] font-black text-white/80 uppercase tracking-[0.2em] border border-white/5 whitespace-nowrap backdrop-blur-sm">
                 Scan your plate
               </div>
               
