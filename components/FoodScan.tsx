@@ -64,7 +64,7 @@ const FoodScan: React.FC<Props> = ({ onAdd, onBack }) => {
     } catch (err: any) {
       console.error("Camera Error:", err);
       if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        setError('Permission denied. Go to Settings > Apps > FitTrack Pro > Permissions to enable Camera.');
+        setError('Camera permission denied. If "Permissions" in Settings says "No permissions requested", please reinstall the app.');
       } else if (err.name === 'NotFoundError') {
         setError('No back camera found.');
       } else if (err.name === 'NotReadableError') {

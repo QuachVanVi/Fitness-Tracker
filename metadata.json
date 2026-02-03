@@ -2,6 +2,7 @@
   "name": "FitTrack Pro",
   "description": "A comprehensive calorie and fitness tracking application with advanced progress visualization, food logging, and macro-nutritional analysis.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "microphone"
   ]
 }
